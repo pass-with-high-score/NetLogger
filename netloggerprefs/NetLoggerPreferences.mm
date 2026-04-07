@@ -1,8 +1,18 @@
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
+#import <dlfcn.h>
 
-#define LOG_PATH @"/var/mobile/Library/Preferences/com.minh.netlogger.logs.txt"
+// Force-load AltList framework so ATLApplicationListMultiSelectionController
+// is available when Preferences.app looks it up by class name from the plist.
+__attribute__((constructor)) static void loadAltList() {
+    // Rootless (Dopamine) path first, then rootful fallback
+    if (!dlopen("/var/jb/Library/Frameworks/AltList.framework/AltList", RTLD_LAZY | RTLD_GLOBAL)) {
+        dlopen("/Library/Frameworks/AltList.framework/AltList", RTLD_LAZY | RTLD_GLOBAL);
+    }
+}
+
+#define LOG_PATH @"/var/tmp/com.minh.netlogger.logs.txt"
 
 // ---------------------------------------------------------------------------
 #pragma mark - Log Viewer
@@ -103,6 +113,38 @@
     if (!_specifiers)
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     return _specifiers;
+}
+
+// Called whenever the user changes any setting — write a /var/tmp mirror so
+// sandboxed app processes can read the current state without cfprefsd issues.
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    [super setPreferenceValue:value specifier:specifier];
+    [self syncSettingsFile];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self syncSettingsFile]; // also sync on back navigation
+}
+
+- (void)syncSettingsFile {
+    // Read current values from cfprefsd
+    CFPreferencesAppSynchronize(CFSTR("com.minh.netlogger"));
+
+    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
+
+    CFPropertyListRef en = CFPreferencesCopyAppValue(CFSTR("enabled"), CFSTR("com.minh.netlogger"));
+    if (en) { settings[@"enabled"] = (__bridge_transfer id)en; }
+
+    CFPropertyListRef apps = CFPreferencesCopyAppValue(CFSTR("selectedApps"), CFSTR("com.minh.netlogger"));
+    if (apps) { settings[@"selectedApps"] = (__bridge_transfer id)apps; }
+
+    NSString *path = @"/var/tmp/com.minh.netlogger.settings.plist";
+    [settings writeToFile:path atomically:YES];
+
+    // Make it world-readable
+    [[NSFileManager defaultManager] setAttributes:@{NSFilePosixPermissions: @(0644)}
+                                     ofItemAtPath:path error:nil];
 }
 
 @end

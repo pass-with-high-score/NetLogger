@@ -39,7 +39,7 @@
 			<key>cell</key>
 			<string>PSLinkListCell</string>
 			<key>detail</key>
-			<string>ATLApplicationSelectionController</string>
+			<string>ATLApplicationListMultiSelectionController</string>
 			<key>defaults</key>
 			<string>com.minh.netlogger</string>
 			<key>key</key>
@@ -50,9 +50,17 @@
 			<array>
 				<dict>
 					<key>sectionType</key>
-					<string>Visible</string>
+					<string>User</string>
+				</dict>
+				<dict>
+					<key>sectionType</key>
+					<string>System</string>
 				</dict>
 			</array>
+			<key>useSearchBar</key>
+			<true/>
+			<key>showIdentifiersAsSubtitle</key>
+			<true/>
 		</dict>
 
 		<!-- ======== LOGS ======== -->
