@@ -12,7 +12,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = NetLogger
 NetLogger_FILES = Tweak.x NLURLProtocol.m
 NetLogger_CFLAGS = -fobjc-arc
-NetLogger_FRAMEWORKS = Foundation WebKit
+NetLogger_FRAMEWORKS = Foundation WebKit Security Network
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 

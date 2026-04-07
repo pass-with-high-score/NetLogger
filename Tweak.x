@@ -2,7 +2,33 @@
 #import <objc/runtime.h>
 #import <syslog.h>
 #import <WebKit/WebKit.h>
+#import <Security/SecureTransport.h>
+#import <Network/Network.h>
+#import <substrate.h>
 #import "NLURLProtocol.h"
+
+// ---------------------------------------------------------------------------
+// Entitlement Sandbox Checks
+// ---------------------------------------------------------------------------
+typedef struct __SecTask *SecTaskRef;
+extern SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
+extern CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef entitlement, CFErrorRef *error);
+
+static BOOL isWebBrowserApp() {
+    SecTaskRef task = SecTaskCreateFromSelf(kCFAllocatorDefault);
+    if (!task) return NO;
+    
+    BOOL isBrowser = NO;
+    CFTypeRef value = SecTaskCopyValueForEntitlement(task, CFSTR("com.apple.developer.web-browser"), nil);
+    if (value) {
+        if (CFGetTypeID(value) == CFBooleanGetTypeID()) {
+            isBrowser = CFBooleanGetValue((CFBooleanRef)value);
+        }
+        CFRelease(value);
+    }
+    CFRelease(task);
+    return isBrowser;
+}
 
 #define LOG_FILENAME  @"com.minh.netlogger.logs.txt"
 #define NL_DOMAIN     CFSTR("com.minh.netlogger")
@@ -317,6 +343,64 @@ didCompleteWithError:(NSError *)error {
 @end
 
 // ---------------------------------------------------------------------------
+// C-Level Hooks (Security & Network)
+// ---------------------------------------------------------------------------
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+// 1. SSLWrite
+static OSStatus (*orig_SSLWrite)(SSLContextRef context, const void *data, size_t dataLength, size_t *processed);
+static OSStatus hook_SSLWrite(SSLContextRef context, const void *data, size_t dataLength, size_t *processed) {
+    if (isAppEnabled() && data && dataLength > 0) {
+        NSData *d = [NSData dataWithBytes:data length:MIN(dataLength, 1024)];
+        NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+        if (s && ([s hasPrefix:@"GET "] || [s hasPrefix:@"POST "])) {
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+            NSDictionary *dict = @{
+                @"url": @"[RAW C-Level Request]",
+                @"status": @(0),
+                @"method": @"RAW",
+                @"app": app,
+                @"source": @"SSLWrite",
+                @"duration_ms": @(0),
+                @"req_body": s
+            };
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        }
+    }
+    return orig_SSLWrite(context, data, dataLength, processed);
+}
+
+// 2. SSLRead
+static OSStatus (*orig_SSLRead)(SSLContextRef context, void *data, size_t dataLength, size_t *processed);
+static OSStatus hook_SSLRead(SSLContextRef context, void *data, size_t dataLength, size_t *processed) {
+    OSStatus status = orig_SSLRead(context, data, dataLength, processed);
+    if (isAppEnabled() && status == noErr && processed && *processed > 0 && data) {
+        NSData *d = [NSData dataWithBytes:data length:MIN(*processed, 1024)];
+        NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+        if (s && [s containsString:@"HTTP/1."]) {
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+            NSDictionary *dict = @{
+                @"url": @"[RAW C-Level Response]",
+                @"status": @(200),
+                @"method": @"RAW",
+                @"app": app,
+                @"source": @"SSLRead",
+                @"duration_ms": @(0),
+                @"res_body": s
+            };
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        }
+    }
+    return status;
+}
+
+#pragma clang diagnostic pop
+
+// ---------------------------------------------------------------------------
 // NSURLSession hooks
 // ---------------------------------------------------------------------------
 
@@ -536,8 +620,17 @@ static BOOL isRegisteringProtocol = NO;
         // Đăng ký toàn cục NSURLProtocol
         [NSURLProtocol registerClass:[NLURLProtocol class]];
         
-        // Bỏ qua Brave Browser do lõi BraveCore (Rust) xung đột trực tiếp với Custom Scheme và sẽ panic (SIGTRAP)
-        if (![bid isEqualToString:@"com.brave.ios.browser"]) {
+        // MSHookFunction cho các hàm C-Level API
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        MSHookFunction((void *)SSLWrite, (void *)hook_SSLWrite, (void **)&orig_SSLWrite);
+        MSHookFunction((void *)SSLRead, (void *)hook_SSLRead, (void **)&orig_SSLRead);
+#pragma clang diagnostic pop
+        
+        // Tự động Quét thẻ bài Entitlement của Ứng dụng. 
+        // Triệt để Bỏ qua MỌI Trình Diệt Web (Chrome, Edge, Brave...) tự build C++ Network Custom để chống Panic/SigTrap
+        // TUY NHIÊN: Lại trừ Safari ra (com.apple.mobilesafari) vì Safari là hàng zin của Apple, nó xài được và không bị crash!
+        if (!isWebBrowserApp() || [bid isEqualToString:@"com.apple.mobilesafari"]) {
             // Đăng ký với WebKit (Sử dụng Private API)
             Class cls = NSClassFromString(@"WKBrowsingContextController");
             SEL sel = NSSelectorFromString(@"registerSchemeForCustomProtocol:");
@@ -552,7 +645,7 @@ static BOOL isRegisteringProtocol = NO;
                 NSLog(@"[NetLogger] Vô hiệu hoá WKWebView bảo mật ngầm thành công cho %@", bid);
             }
         } else {
-            NSLog(@"[NetLogger] Vô hiệu hoá WKWebView hack cho Brave để tránh Rust Panic.");
+            NSLog(@"[NetLogger] Trình duyệt web độc lập phát hiện (%@) - Từ chối hack WKWebView để chống crash.", bid);
         }
     }
 }
