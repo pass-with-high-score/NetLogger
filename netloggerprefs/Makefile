@@ -5,7 +5,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = NetLoggerPreferences
 
-NetLoggerPreferences_FILES = NetLoggerPreferences.mm
+NetLoggerPreferences_FILES = NetLoggerPreferences.mm NLLogDetailViewController.m
 NetLoggerPreferences_INSTALL_PATH = /Library/PreferenceBundles
 NetLoggerPreferences_CFLAGS = -fobjc-arc
 NetLoggerPreferences_FRAMEWORKS = UIKit

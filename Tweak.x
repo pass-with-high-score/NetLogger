@@ -2,8 +2,7 @@
 #import <objc/runtime.h>
 #import <syslog.h>
 
-#define SETTINGS_PATH @"/var/tmp/com.minh.netlogger.settings.plist"
-#define LOG_PATH      @"/var/tmp/com.minh.netlogger.logs.txt"
+#define LOG_FILENAME  @"com.minh.netlogger.logs.txt"
 #define NL_DOMAIN     CFSTR("com.minh.netlogger")
 #define TAG           "NetLogger"
 
@@ -11,15 +10,43 @@
 // Log writer
 // ---------------------------------------------------------------------------
 
-static void appendLine(NSString *text) {
+static NSString *getLogPath() {
+    NSString *home = NSHomeDirectory();
+    NSString *caches = [home stringByAppendingPathComponent:@"Library/Caches"];
     NSFileManager *fm = [NSFileManager defaultManager];
-    if (![fm fileExistsAtPath:LOG_PATH])
-        [fm createFileAtPath:LOG_PATH contents:nil attributes:@{NSFilePosixPermissions: @(0666)}];
-    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:LOG_PATH];
-    if (!fh) { syslog(LOG_ERR, TAG ": cannot open log file"); return; }
+    NSError *error;
+    if (![fm fileExistsAtPath:caches]) {
+        BOOL success = [fm createDirectoryAtPath:caches withIntermediateDirectories:YES attributes:nil error:&error];
+        if (!success) {
+            NSLog(@"[NetLogger-Debug] Failed to create Caches dir: %@", error);
+        }
+    }
+    NSString *path = [caches stringByAppendingPathComponent:LOG_FILENAME];
+    // NSLog(@"[NetLogger-Debug] Log Path is: %@", path);
+    return path;
+}
+
+static void appendLine(NSString *text) {
+    NSString *logPath = getLogPath();
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:logPath]) {
+        BOOL success = [fm createFileAtPath:logPath contents:nil attributes:@{NSFilePosixPermissions: @(0666)}];
+        if (!success) {
+            NSLog(@"[NetLogger-Debug] Failed to create log file at path: %@", logPath);
+            return;
+        }
+    }
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
+    if (!fh) {
+        NSLog(@"[NetLogger-Debug] Cannot open log file for writing at path: %@", logPath);
+        return;
+    }
     [fh seekToEndOfFile];
     [fh writeData:[[text stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
     [fh closeFile];
+    
+    // Uncomment to see every log written
+    // NSLog(@"[NetLogger-Debug] Wrote line to %@", logPath);
 }
 
 // ---------------------------------------------------------------------------
@@ -27,8 +54,12 @@ static void appendLine(NSString *text) {
 // ---------------------------------------------------------------------------
 
 static NSDictionary *readPrefs() {
-    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:SETTINGS_PATH];
+    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.minh.netlogger.settings.plist"];
     if (d) return d;
+    
+    d = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.minh.netlogger.settings.plist"];
+    if (d) return d;
+
 
     CFPreferencesAppSynchronize(NL_DOMAIN);
     NSMutableDictionary *r = [NSMutableDictionary dictionary];
@@ -53,22 +84,37 @@ static BOOL isAppEnabled() {
 
 static NSString *buildEntry(NSURLRequest *request, NSData *data, NSURLResponse *response) {
     NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
-    NSDateFormatter *df = [[NSDateFormatter alloc] init];
-    df.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-
-    NSString *body = @"(no body / binary)";
-    if (data.length > 0 && data.length < 16384) {
-        NSString *s = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        if (s) body = s;
+    
+    NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+    dict[@"id"] = [[NSUUID UUID] UUIDString];
+    dict[@"timestamp"] = @([[NSDate date] timeIntervalSince1970]);
+    dict[@"method"] = request.HTTPMethod ?: @"GET";
+    dict[@"url"] = request.URL.absoluteString ?: @"(unknown)";
+    dict[@"status"] = http ? @(http.statusCode) : @(0);
+    dict[@"app"] = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+    
+    if (request.allHTTPHeaderFields) {
+        dict[@"req_headers"] = request.allHTTPHeaderFields;
     }
-    return [NSString stringWithFormat:
-        @"[%@] %@ %@\nStatus: %@\nApp: %@\nResponse:\n%@\n---",
-        [df stringFromDate:[NSDate date]],
-        request.HTTPMethod ?: @"GET",
-        request.URL.absoluteString ?: @"(unknown)",
-        http ? @(http.statusCode).stringValue : @"?",
-        [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown",
-        body];
+    
+    NSData *reqBodyData = request.HTTPBody;
+    if (reqBodyData.length > 0 && reqBodyData.length < 1024 * 1024) {
+        dict[@"req_body_base64"] = [reqBodyData base64EncodedStringWithOptions:0];
+    }
+    
+    if (http && http.allHeaderFields) {
+        dict[@"res_headers"] = http.allHeaderFields;
+    }
+    
+    if (data.length > 0 && data.length < 1024 * 1024) {
+        dict[@"res_body_base64"] = [data base64EncodedStringWithOptions:0];
+    }
+    
+    NSError *error;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dict options:0 error:&error];
+    if (!jsonData) return nil;
+    
+    return [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
 }
 
 // ---------------------------------------------------------------------------
@@ -115,14 +161,14 @@ static NSString *buildEntry(NSURLRequest *request, NSData *data, NSURLResponse *
         [(id<NSURLSessionDataDelegate>)_real URLSession:session dataTask:task didReceiveData:data];
 }
 
-// Log completed request
 - (void)URLSession:(NSURLSession *)session
               task:(NSURLSessionTask *)task
 didCompleteWithError:(NSError *)error {
     if (!error) {
         NSNumber *tid = @(task.taskIdentifier);
-        appendLine(buildEntry(task.currentRequest ?: task.originalRequest,
-                              _bodies[tid], task.response));
+        NSString *entry = buildEntry(task.currentRequest ?: task.originalRequest,
+                                     _bodies[tid], task.response);
+        if (entry) appendLine(entry);
         [_bodies removeObjectForKey:tid];
     }
     if ([_real respondsToSelector:@selector(URLSession:task:didCompleteWithError:)])
@@ -158,7 +204,8 @@ static const char kProxyKey = 0;
                             completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
     if (!isAppEnabled()) return %orig;
     void (^h)(NSData *, NSURLResponse *, NSError *) = ^(NSData *d, NSURLResponse *r, NSError *e) {
-        appendLine(buildEntry(request, d, r));
+        NSString *entry = buildEntry(request, d, r);
+        if (entry) appendLine(entry);
         if (completionHandler) completionHandler(d, r, e);
     };
     return %orig(request, h);
@@ -169,7 +216,8 @@ static const char kProxyKey = 0;
     if (!isAppEnabled()) return %orig;
     void (^h)(NSData *, NSURLResponse *, NSError *) = ^(NSData *d, NSURLResponse *r, NSError *e) {
         NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-        appendLine(buildEntry(req, d, r));
+        NSString *entry = buildEntry(req, d, r);
+        if (entry) appendLine(entry);
         if (completionHandler) completionHandler(d, r, e);
     };
     return %orig(url, h);
@@ -180,7 +228,8 @@ static const char kProxyKey = 0;
                                 completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
     if (!isAppEnabled()) return %orig;
     void (^h)(NSData *, NSURLResponse *, NSError *) = ^(NSData *d, NSURLResponse *r, NSError *e) {
-        appendLine(buildEntry(request, d, r));
+        NSString *entry = buildEntry(request, d, r);
+        if (entry) appendLine(entry);
         if (completionHandler) completionHandler(d, r, e);
     };
     return %orig(request, bodyData, h);
@@ -201,13 +250,18 @@ static const char kProxyKey = 0;
     NSArray *selected   = prefs[@"selectedApps"];
     BOOL thisApp        = [selected containsObject:bid];
 
-    NSDateFormatter *df = [[NSDateFormatter alloc] init];
-    df.dateFormat = @"yyyy-MM-dd HH:mm:ss";
-
-    appendLine([NSString stringWithFormat:
-        @"[%@] DIAGNOSTIC — %@\n  settingsFile: %@  masterSwitch: %@  selected: %@\n---",
-        [df stringFromDate:[NSDate date]], bid,
-        prefs ? @"found" : @"MISSING",
-        masterOn ? @"ON" : @"OFF",
-        thisApp ? @"YES" : @"NO"]);
+    if (masterOn && thisApp) {
+        NSDictionary *diag = @{
+            @"id": [[NSUUID UUID] UUIDString],
+            @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+            @"method": @"DIAGNOSTIC",
+            @"url": [NSString stringWithFormat:@"diagnostic://app-started/%@", bid],
+            @"status": @(200),
+            @"app": bid
+        };
+        NSData *d = [NSJSONSerialization dataWithJSONObject:diag options:0 error:nil];
+        if (d) {
+            appendLine([[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding]);
+        }
+    }
 }
