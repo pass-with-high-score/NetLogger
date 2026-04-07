@@ -1,0 +1,9 @@
+Package: com.minh.netlogger
+Name: NetLogger
+Version: 0.0.1
+Architecture: iphoneos-arm64
+Description: Network request logger for jailbroken iOS (Dopamine rootless)
+Maintainer: Minh
+Author: Minh
+Section: Tweaks
+Depends: mobilesubstrate, preferenceloader, com.opa334.altlist

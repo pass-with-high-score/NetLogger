@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>title</key>
+	<string>NetLogger</string>
+	<key>items</key>
+	<array>
+		<!-- ======== GENERAL ======== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>General</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>Enable NetLogger</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>defaults</key>
+			<string>com.minh.netlogger</string>
+			<key>default</key>
+			<false/>
+		</dict>
+
+		<!-- ======== APP SELECTION ======== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>App Selection</string>
+			<key>footerText</key>
+			<string>Choose which apps to intercept network requests from.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>ATLApplicationSelectionController</string>
+			<key>defaults</key>
+			<string>com.minh.netlogger</string>
+			<key>key</key>
+			<string>selectedApps</string>
+			<key>label</key>
+			<string>Select Apps to Monitor</string>
+			<key>sections</key>
+			<array>
+				<dict>
+					<key>sectionType</key>
+					<string>Visible</string>
+				</dict>
+			</array>
+		</dict>
+
+		<!-- ======== LOGS ======== -->
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Logs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>View Network Logs</string>
+			<key>detail</key>
+			<string>NetLoggerLogViewerController</string>
+			<key>isController</key>
+			<true/>
+		</dict>
+	</array>
+</dict>
+</plist>
