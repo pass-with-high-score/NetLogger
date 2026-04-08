@@ -5,7 +5,7 @@ make clean
 rm -f packages/*.deb
 
 echo "🛠 2. Biên dịch bản Tweak mới nhất..."
-make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+make package
 
 echo "📂 3. Copy .deb vào thư mục repo (docs/debs)..."
 cp packages/*.deb docs/debs/
