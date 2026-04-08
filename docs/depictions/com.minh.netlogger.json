@@ -1,0 +1,85 @@
+{
+  "minVersion": "0.1",
+  "headerImage": "",
+  "tintColor": "#FF6B00",
+  "tabs": [
+    {
+      "tabname": "Details",
+      "views": [
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "# NetLogger\n\nA powerful network request logger for jailbroken iOS. Monitor and inspect HTTP/HTTPS traffic from any app in real time.\n\n## Features\n\n- **Per-App Monitoring** — Choose exactly which apps to monitor. Zero overhead on unselected apps.\n- **Full Request Logging** — Captures method, URL, status code, response body (up to 8 KB), duration, and timestamp.\n- **Socket Capture** — Optional TCP/UDP socket-level traffic capture beyond NSURLSession.\n- **Bypass Cache (No 304)** — Force fresh responses by stripping ETag and cache headers. Great for debugging SDKs like RevenueCat.\n- **Domain Blacklist** — Exclude noisy domains from logs with a comma-separated list.\n- **MitM Response Rules** — Modify API responses in real-time with custom rules.\n- **Built-in Log Viewer** — View, refresh, and clear logs directly from Settings.\n\n## How to Use\n\n1. Open **Settings → NetLogger**\n2. Enable the tweak\n3. Select which apps to monitor\n4. Open the target app and use it normally\n5. Go back to Settings → NetLogger → **View Logs**",
+          "useSpacing": true,
+          "useRawFormat": true
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionHeaderView",
+          "title": "Information"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Developer",
+          "text": "Minh"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Version",
+          "text": "0.0.1"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Compatibility",
+          "text": "iOS 15+"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Architecture",
+          "text": "arm64 / arm64e (rootless)"
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionHeaderView",
+          "title": "Dependencies"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Substrate",
+          "text": "Required"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "PreferenceLoader",
+          "text": "Required"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "AltList",
+          "text": "Required"
+        }
+      ],
+      "class": "DepictionStackView"
+    },
+    {
+      "tabname": "Changelog",
+      "views": [
+        {
+          "class": "DepictionHeaderView",
+          "title": "0.0.1"
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "- Initial release\n- HTTP/HTTPS request logging\n- TCP/UDP socket capture\n- Per-app monitoring\n- Cache bypass (No 304)\n- Domain blacklist\n- MitM response rules\n- Built-in log viewer",
+          "useSpacing": true,
+          "useRawFormat": true
+        }
+      ],
+      "class": "DepictionStackView"
+    }
+  ],
+  "class": "DepictionTabView"
+}
