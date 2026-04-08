@@ -1,6 +1,6 @@
 {
   "minVersion": "0.4",
-  "headerImage": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/icon.png",
+  "headerImage": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/icon.png",
   "tintColor": "#FF6B00",
   "tabs": [
     {
@@ -11,23 +11,23 @@
           "class": "DepictionScreenshotsView",
           "screenshots": [
             {
-              "url": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/screenshots/screenshot1.jpg",
+              "url": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/screenshots/screenshot1.jpg",
               "accessibilityText": "Main Screen"
             },
             {
-              "url": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/screenshots/screenshot2.jpg",
+              "url": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/screenshots/screenshot2.jpg",
               "accessibilityText": "Logs Viewer"
             },
             {
-              "url": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/screenshots/screenshot3.jpg",
+              "url": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/screenshots/screenshot3.jpg",
               "accessibilityText": "MitM Rules"
             },
             {
-              "url": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/screenshots/screenshot4.jpg",
+              "url": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/screenshots/screenshot4.jpg",
               "accessibilityText": "Log Detail"
             },
             {
-              "url": "https://raw.githubusercontent.com/nqmgaming/NetLogger/main/docs/screenshots/screenshot5.jpg",
+              "url": "https://raw.githubusercontent.com/pass-with-high-score/netlogger/main/docs/screenshots/screenshot5.jpg",
               "accessibilityText": "Settings"
             }
           ],
@@ -36,7 +36,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "A powerful network request logger for jailbroken iOS. Monitor and inspect HTTP/HTTPS traffic from any app in real time.\n\n### Features\n\n- **Per-App Monitoring** \u2014 Choose exactly which apps to monitor. Zero overhead on unselected apps.\n- **Full Request Logging** \u2014 Captures method, URL, status code, response body (up to 8 KB), duration, and timestamp.\n- **Socket Capture** \u2014 Optional TCP/UDP socket-level traffic capture beyond NSURLSession.\n- **Bypass Cache (No 304)** \u2014 Force fresh responses by stripping ETag and cache headers. Great for debugging SDKs like RevenueCat.\n- **Domain Blacklist** \u2014 Exclude noisy domains from logs with a comma-separated list.\n- **MitM Response Rules** \u2014 Modify API responses in real-time with custom rules.\n- **Built-in Log Viewer** \u2014 View, refresh, and clear logs directly from Settings.\n\n### How to Use\n\n1. Open **Settings \u2192 NetLogger**\n2. Enable the tweak\n3. Select which apps to monitor\n4. Open the target app and use it normally\n5. Go back to Settings \u2192 NetLogger \u2192 **View Logs**",
+          "markdown": "A powerful network request logger for jailbroken iOS. Monitor and inspect HTTP/HTTPS traffic from any app in real time.\n\n### Features\n\n- **Per-App Monitoring** \u2014 Choose exactly which apps to monitor. Zero overhead on unselected apps.\n- **Full Request Logging** \u2014 Captures method, URL, status code, response body (up to 8 KB), duration, and timestamp.\n- **Socket Capture** \u2014 Optional TCP/UDP socket-level traffic capture beyond NSURLSession.\n- **Bypass Cache (No 304)** \u2014 Force fresh responses by stripping ETag and cache headers. Great for debugging SDKs like RevenueCat.\n- **Domain Blacklist** \u2014 Exclude noisy domains from logs with a comma-separated list.\n- **MitM Response Rules** \u2014 Modify API responses in real-time with custom rules.\n- **Built-in Log Viewer** \u2014 View, refresh, and clear logs directly from Settings.\n\n### How to Use\n\n1. Open **Settings \u2192 netlogger**\n2. Enable the tweak\n3. Select which apps to monitor\n4. Open the target app and use it normally\n5. Go back to Settings \u2192 netlogger \u2192 **View Logs**",
           "useSpacing": true
         },
         {
