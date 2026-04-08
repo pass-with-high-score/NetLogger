@@ -7,12 +7,14 @@ Architectures: iphoneos-arm iphoneos-arm64 iphoneos-arm64e
 Components: main
 Description: Official repository for NetLogger Tweak
 MD5Sum:
- 28485b1e482ebe76c6b60c81b5968c6e 708 Packages
- 4c7447b89fab4da105d5e791cd482b8b 506 Packages.bz2
- 67c24cab56a43b59736c6f7a22e87fca 445 Packages.gz
- ac26c5e4ae1e8303a28df2eb8d3dbc1b 524 Packages.xz
+ 9891f6a6e3e4ee8b0fb5db55e0504df8 1619 Packages
+ 08cec6bcd87c3c860ca13e022dc443b4 738 Packages.bz2
+ 61b38e1c0fbe71bd2d5e14463c96d38f 627 Packages.gz
+ d8ac902751cde48dfeda77d38f886260 692 Packages.xz
+ 481983f564d35608721f167aa550de5d 608 Packages.zst
 SHA256:
- 120fdc761a0ecf744c7bafa144a5d58ea16416631949c458b9a5a88d516e66d5 708 Packages
- 9363fc8f1aee61458510bf3a7ded7ac450bd765a9d063e7f6bb85b6435b500c6 506 Packages.bz2
- 1bfbedd6469ec785274479d9a166337015ca413785f43bc7996f18e5ff6b40d4 445 Packages.gz
- d698eaf201dd5bfdb98515b6006e113d0e9400b0657bd27c3e40f6656e78c5df 524 Packages.xz
+ 1ed3cda026e7e7428e2601905079988b2c084e1f765fe8f3481f9edd3390ba64 1619 Packages
+ 8f09f26af9ed996946478b03f509bc7bb7e70509952fbc33c3e3bcaf456ec29e 738 Packages.bz2
+ 32d47376c1c56e6a9b013f80ea4443a036ad570beca93f353850d07906f67b79 627 Packages.gz
+ d3214b263f7572e8cb3c389df1df0f346da15dd211006dbf7d9f4ea6d95feb96 692 Packages.xz
+ 159e570eae43a253fdf6d366bc9aa8621eb5300c1a4b38459f2e82573c19e3e0 608 Packages.zst
