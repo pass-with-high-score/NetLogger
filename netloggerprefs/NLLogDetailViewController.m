@@ -569,7 +569,11 @@
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
         [UIView animateWithDuration:0.3 animations:^{
-            cell.backgroundColor = nil;
+            if (@available(iOS 13.0, *)) {
+                cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+            } else {
+                cell.backgroundColor = [UIColor whiteColor];
+            }
         }];
     });
 }
