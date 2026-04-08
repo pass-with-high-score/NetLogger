@@ -1,0 +1,29 @@
+"NetLogger" = "NetLogger";
+"General" = "Cài đặt chung";
+"Enable NetLogger" = "Bật NetLogger";
+"Disable App Caching (No 304)" = "Tắt Cache App (Bỏ qua 304)";
+"Enable Socket Capture (TCP/UDP)" = "Bắt tín hiệu Socket (TCP/UDP)";
+
+"App Selection" = "Chọn Ứng dụng";
+"Choose which apps to intercept network requests from." = "Chọn các ứng dụng bạn muốn theo dõi mạng.";
+"Select Apps to Monitor" = "Chọn App Cần Theo Dõi";
+
+"Block Rules" = "Chặn Tên Miền";
+"Separate multiple domains with commas." = "Ngăn cách nhiều tên miền bằng dấu phẩy.";
+"Blacklist" = "Danh sách đen";
+"e.g. tracking.com, analytics.net" = "vd: tracking.com, analytics.net";
+
+"Advanced" = "Nâng cao";
+"Man-in-the-Middle: Modify API responses in real-time." = "Man-in-the-Middle: Chỉnh sửa API trả về theo thời gian thực.";
+"MitM Response Rules" = "Quy tắc MitM (Sửa API)";
+
+"Logs" = "Lịch sử Mạng";
+"View Network Logs" = "Xem Log Mạng";
+
+"About" = "Giới thiệu";
+"NetLogger v0.0.1 - Universal Network Interceptor." = "NetLogger v0.0.1 - Công cụ soi mạng chuyên nghiệp.";
+"GitHub / Source Code ⭐️" = "Mã nguồn / GitHub ⭐️";
+"Version" = "Phiên bản";
+"Author" = "Tác giả";
+
+"Restore Default Settings" = "Khôi phục Cài đặt Gốc";

@@ -1,4 +1,5 @@
 #import "NLMitmRulesController.h"
+#import "NLLocalization.h"
 
 #define PREFS_PLIST @"/var/jb/var/mobile/Library/Preferences/com.minh.netlogger.settings.plist"
 
@@ -146,7 +147,7 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = self.ruleIndex < 0 ? @"New Rule" : @"Edit Rule";
+    self.title = self.ruleIndex < 0 ? NLLocalizedString(@"New Rule", @"New Rule") : NLLocalizedString(@"Edit Rule", @"Edit Rule");
     self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
 
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
@@ -214,10 +215,10 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
 - (NSString *)tableView:(UITableView *)tv titleForHeaderInSection:(NSInteger)s {
     switch (s) {
-        case 0: return @"Rule Type";
-        case 1: return @"URL Match";
+        case 0: return NLLocalizedString(@"Rule Type", @"Rule Type");
+        case 1: return NLLocalizedString(@"URL Match", @"URL Match");
         case 2: return [self modifySectionTitle];
-        case 3: return @"State";
+        case 3: return NLLocalizedString(@"State", @"State");
         default: return nil;
     }
 }
@@ -237,11 +238,11 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
 - (NSString *)modifySectionTitle {
     switch (_selectedType) {
-        case 0: return @"Response Body (JSON)";
-        case 1: return @"Request Body (JSON)";
-        case 2: return @"Request Header";
-        case 3: return @"Response Header";
-        case 4: return @"URL Rewrite";
+        case 0: return NLLocalizedString(@"Response Body", @"Response Body");
+        case 1: return NLLocalizedString(@"Request Body", @"Request Body");
+        case 2: return NLLocalizedString(@"Request Header", @"Request Header");
+        case 3: return NLLocalizedString(@"Response Header", @"Response Header");
+        case 4: return NLLocalizedString(@"URL Rewrite", @"URL Rewrite");
         default: return @"Modify";
     }
 }
@@ -266,18 +267,18 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
 - (NSString *)keyLabel {
     switch (_selectedType) {
-        case 0: case 1: return @"Key Path";
-        case 2: case 3: return @"Header Name";
-        case 4: return @"Find";
+        case 0: case 1: return NLLocalizedString(@"Key Path", @"Key Path");
+        case 2: case 3: return NLLocalizedString(@"Header Name", @"Header Name");
+        case 4: return NLLocalizedString(@"Find", @"Find");
         default: return @"Key";
     }
 }
 
 - (NSString *)valueLabel {
     switch (_selectedType) {
-        case 0: case 1: return @"New Value";
-        case 2: case 3: return @"Header Value";
-        case 4: return @"Replace With";
+        case 0: case 1: return NLLocalizedString(@"New Value", @"New Value");
+        case 2: case 3: return NLLocalizedString(@"Header Value", @"Header Value");
+        case 4: return NLLocalizedString(@"Replace With", @"Replace With");
         default: return @"Value";
     }
 }
@@ -316,7 +317,7 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
     // ── Section 1: URL Pattern ──
     if (indexPath.section == 1) {
-        return [self textFieldCellWithLabel:@"URL Contains"
+        return [self textFieldCellWithLabel:NLLocalizedString(@"URL Contains", @"URL Contains")
                                placeholder:@"/api/v1/user"
                                       text:self.rule[@"url_pattern"]
                                     assign:^(UITextField *f) { self->_urlField = f; }];
@@ -339,7 +340,7 @@ static UIColor *ruleTypeColor(NSInteger type) {
 
     // ── Section 3: Enabled toggle ──
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
-    cell.textLabel.text = @"Enabled";
+    cell.textLabel.text = NLLocalizedString(@"Enabled", @"Enabled");
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     _enabledSwitch = [[UISwitch alloc] init];
     _enabledSwitch.on = [self.rule[@"enabled"] boolValue];
@@ -414,7 +415,7 @@ static UIColor *ruleTypeColor(NSInteger type) {
     NSString *newValue = _valueField.text ?: @"";
 
     if (urlPattern.length == 0 || keyPath.length == 0) {
-        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Missing Fields"
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:NLLocalizedString(@"Missing Fields", @"Missing Fields")
             message:@"URL pattern and key/find field are required." preferredStyle:UIAlertControllerStyleAlert];
         [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:a animated:YES completion:nil];

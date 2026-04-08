@@ -1,4 +1,5 @@
 #import "NLLogDetailViewController.h"
+#import "NLLocalization.h"
 #import <WebKit/WebKit.h>
 
 // ---------------------------------------------------------------------------

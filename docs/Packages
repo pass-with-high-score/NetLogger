@@ -2,13 +2,13 @@ Package: com.minh.netlogger
 Version: 0.0.1
 Architecture: iphoneos-arm64
 Maintainer: Minh
-Installed-Size: 652
+Installed-Size: 668
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Filename: ./debs/com.minh.netlogger_0.0.1_iphoneos-arm64.deb
-Size: 89404
-MD5sum: 5be836abae0f18114a1b8143390a781e
-SHA1: ebb351013dbeaa11757c3c38ac6ab211fb7cbd8c
-SHA256: c377b655e84a23118931e9baf297a4c388a06f81f561fadc33f05b2225a1c798
+Size: 93214
+MD5sum: ea7a5406c0b64de565ebd64886ab6199
+SHA1: c20462c746d59b10501c298b7af72f2bba77993a
+SHA256: f63e8f341a58ab1122196306b4eb76bed0895abe8b61da28a2cce88cb4342beb
 Section: Tweaks
 Description: Network request logger for jailbroken iOS (Dopamine rootless)
 Author: Minh

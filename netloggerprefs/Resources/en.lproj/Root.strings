@@ -1,0 +1,29 @@
+"NetLogger" = "NetLogger";
+"General" = "General";
+"Enable NetLogger" = "Enable NetLogger";
+"Disable App Caching (No 304)" = "Disable App Caching (No 304)";
+"Enable Socket Capture (TCP/UDP)" = "Enable Socket Capture (TCP/UDP)";
+
+"App Selection" = "App Selection";
+"Choose which apps to intercept network requests from." = "Choose which apps to intercept network requests from.";
+"Select Apps to Monitor" = "Select Apps to Monitor";
+
+"Block Rules" = "Block Rules";
+"Separate multiple domains with commas." = "Separate multiple domains with commas.";
+"Blacklist" = "Blacklist";
+"e.g. tracking.com, analytics.net" = "e.g. tracking.com, analytics.net";
+
+"Advanced" = "Advanced";
+"Man-in-the-Middle: Modify API responses in real-time." = "Man-in-the-Middle: Modify API responses in real-time.";
+"MitM Response Rules" = "MitM Response Rules";
+
+"Logs" = "Logs";
+"View Network Logs" = "View Network Logs";
+
+"About" = "About";
+"NetLogger v0.0.1 - Universal Network Interceptor." = "NetLogger v0.0.1 - Universal Network Interceptor.";
+"GitHub / Source Code ⭐️" = "GitHub / Source Code ⭐️";
+"Version" = "Version";
+"Author" = "Author";
+
+"Restore Default Settings" = "Restore Default Settings";
