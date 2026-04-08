@@ -8,6 +8,10 @@
 #import <sys/socket.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
+#import <dlfcn.h>
+#import <mach-o/dyld.h>
+#import <mach-o/loader.h>
+#import <mach-o/nlist.h>
 #import "NLURLProtocol.h"
 
 // ---------------------------------------------------------------------------
@@ -477,6 +481,514 @@ static OSStatus hook_SSLRead(SSLContextRef context, void *data, size_t dataLengt
 #pragma clang diagnostic pop
 
 // ---------------------------------------------------------------------------
+// BoringSSL Hooks (Flutter / Dart VM)
+// ---------------------------------------------------------------------------
+// Flutter dùng BoringSSL riêng bên trong Flutter.framework, không đi qua
+// SecureTransport của Apple → SSLWrite/SSLRead không bắt được.
+// Hook SSL_write/SSL_read của BoringSSL để capture decrypted traffic.
+
+// BoringSSL API:
+//   int SSL_write(SSL *ssl, const void *buf, int num)
+//   int SSL_read(SSL *ssl, void *buf, int num)
+//   int SSL_CTX_set_alpn_protos(SSL_CTX *ctx, const uint8_t *protos, unsigned protos_len)
+typedef void *BORING_SSL;
+typedef void *BORING_SSL_CTX;
+static int (*orig_boring_SSL_write)(BORING_SSL ssl, const void *buf, int num);
+static int (*orig_boring_SSL_read)(BORING_SSL ssl, void *buf, int num);
+static int (*orig_boring_SSL_CTX_set_alpn_protos)(BORING_SSL_CTX ctx, const uint8_t *protos, unsigned protos_len);
+
+// ── ALPN Downgrade: Force HTTP/1.1 ──
+// Flutter mặc định negotiate HTTP/2 (binary frames) → hooks không parse được.
+// Thay ALPN list bằng chỉ http/1.1 để force plaintext HTTP → parse đầy đủ.
+static const uint8_t kHTTP11Only[] = {0x08, 'h','t','t','p','/','1','.','1'};
+
+static int hook_boring_SSL_CTX_set_alpn_protos(BORING_SSL_CTX ctx, const uint8_t *protos, unsigned protos_len) {
+    if (isAppEnabled()) {
+        return orig_boring_SSL_CTX_set_alpn_protos(ctx, kHTTP11Only, sizeof(kHTTP11Only));
+    }
+    return orig_boring_SSL_CTX_set_alpn_protos(ctx, protos, protos_len);
+}
+
+static int hook_boring_SSL_write(BORING_SSL ssl, const void *buf, int num) {
+    if (isAppEnabled() && buf && num > 0) {
+        NSData *d = [NSData dataWithBytes:buf length:MIN(num, 2048)];
+        NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+        if (s && ([s hasPrefix:@"GET "] || [s hasPrefix:@"POST "] ||
+                  [s hasPrefix:@"PUT "] || [s hasPrefix:@"DELETE "] ||
+                  [s hasPrefix:@"PATCH "] || [s hasPrefix:@"HEAD "] ||
+                  [s hasPrefix:@"OPTIONS "])) {
+            // Parse HTTP request line to extract method + URL
+            NSString *method = @"RAW";
+            NSString *path = @"";
+            NSString *host = @"";
+            NSRange firstLine = [s rangeOfString:@"\r\n"];
+            if (firstLine.location != NSNotFound) {
+                NSString *requestLine = [s substringToIndex:firstLine.location];
+                NSArray *parts = [requestLine componentsSeparatedByString:@" "];
+                if (parts.count >= 2) {
+                    method = parts[0];
+                    path = parts[1];
+                }
+                // Extract Host header
+                NSRange hostRange = [s rangeOfString:@"Host: " options:NSCaseInsensitiveSearch];
+                if (hostRange.location != NSNotFound) {
+                    NSUInteger start = hostRange.location + hostRange.length;
+                    NSRange eol = [s rangeOfString:@"\r\n" options:0 range:NSMakeRange(start, s.length - start)];
+                    if (eol.location != NSNotFound) {
+                        host = [s substringWithRange:NSMakeRange(start, eol.location - start)];
+                    }
+                }
+            }
+
+            NSString *url = host.length > 0 ? [NSString stringWithFormat:@"https://%@%@", host, path] : path;
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+
+            // Extract body (after \r\n\r\n)
+            NSString *body = nil;
+            NSRange bodyStart = [s rangeOfString:@"\r\n\r\n"];
+            if (bodyStart.location != NSNotFound) {
+                NSUInteger offset = bodyStart.location + 4;
+                if (offset < s.length) {
+                    body = [s substringFromIndex:offset];
+                }
+            }
+
+            // Extract headers
+            NSMutableDictionary *headers = [NSMutableDictionary dictionary];
+            if (firstLine.location != NSNotFound) {
+                NSString *headerBlock = s;
+                if (bodyStart.location != NSNotFound) {
+                    headerBlock = [s substringToIndex:bodyStart.location];
+                }
+                NSArray *headerLines = [headerBlock componentsSeparatedByString:@"\r\n"];
+                for (NSUInteger i = 1; i < headerLines.count; i++) {
+                    NSString *line = headerLines[i];
+                    NSRange colon = [line rangeOfString:@": "];
+                    if (colon.location != NSNotFound) {
+                        headers[[line substringToIndex:colon.location]] = [line substringFromIndex:colon.location + 2];
+                    }
+                }
+            }
+
+            NSMutableDictionary *dict = [@{
+                @"id": [[NSUUID UUID] UUIDString],
+                @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+                @"url": url,
+                @"status": @(0),
+                @"method": method,
+                @"app": app,
+                @"source": @"BoringSSL",
+                @"duration_ms": @(0),
+                @"req_headers": headers,
+            } mutableCopy];
+            if (body.length > 0) {
+                dict[@"req_body_base64"] = [[body dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0];
+            }
+
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        } else {
+            // Non-HTTP/1.x data (HTTP/2 binary frames hoặc binary protocol)
+            // Log raw để user thấy hook đang hoạt động
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+            const uint8_t *bytes = (const uint8_t *)buf;
+            NSMutableString *hex = [NSMutableString string];
+            for (int i = 0; i < MIN(num, 32); i++) [hex appendFormat:@"%02x ", bytes[i]];
+
+            NSDictionary *dict = @{
+                @"id": [[NSUUID UUID] UUIDString],
+                @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+                @"url": [NSString stringWithFormat:@"raw://ssl-write/%@/%d-bytes", app, num],
+                @"status": @(0),
+                @"method": @"RAW-WRITE",
+                @"app": app,
+                @"source": @"BoringSSL-Raw",
+                @"duration_ms": @(0),
+                @"req_body_base64": [d base64EncodedStringWithOptions:0],
+                @"req_headers": @{@"X-Raw-Hex": hex, @"X-Raw-Size": @(num).stringValue},
+            };
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        }
+    }
+    return orig_boring_SSL_write(ssl, buf, num);
+}
+
+static int hook_boring_SSL_read(BORING_SSL ssl, void *buf, int num) {
+    int ret = orig_boring_SSL_read(ssl, buf, num);
+    if (isAppEnabled() && ret > 0 && buf) {
+        NSData *d = [NSData dataWithBytes:buf length:MIN(ret, 4096)];
+        NSString *s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+        if (s && [s hasPrefix:@"HTTP/"]) {
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+            NSInteger statusCode = 0;
+            NSString *url = @"[Flutter Response]";
+
+            // Parse "HTTP/1.1 200 OK"
+            NSRange firstLine = [s rangeOfString:@"\r\n"];
+            if (firstLine.location != NSNotFound) {
+                NSString *statusLine = [s substringToIndex:firstLine.location];
+                NSArray *parts = [statusLine componentsSeparatedByString:@" "];
+                if (parts.count >= 2) {
+                    statusCode = [parts[1] integerValue];
+                }
+            }
+
+            // Extract response headers
+            NSMutableDictionary *headers = [NSMutableDictionary dictionary];
+            NSRange bodyStart = [s rangeOfString:@"\r\n\r\n"];
+            if (firstLine.location != NSNotFound) {
+                NSString *headerBlock = bodyStart.location != NSNotFound ? [s substringToIndex:bodyStart.location] : s;
+                NSArray *headerLines = [headerBlock componentsSeparatedByString:@"\r\n"];
+                for (NSUInteger i = 1; i < headerLines.count; i++) {
+                    NSString *line = headerLines[i];
+                    NSRange colon = [line rangeOfString:@": "];
+                    if (colon.location != NSNotFound) {
+                        headers[[line substringToIndex:colon.location]] = [line substringFromIndex:colon.location + 2];
+                    }
+                }
+            }
+
+            // Extract body
+            NSString *body = nil;
+            if (bodyStart.location != NSNotFound) {
+                NSUInteger offset = bodyStart.location + 4;
+                if (offset < s.length) {
+                    body = [s substringFromIndex:offset];
+                }
+            }
+
+            NSMutableDictionary *dict = [@{
+                @"id": [[NSUUID UUID] UUIDString],
+                @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+                @"url": url,
+                @"status": @(statusCode),
+                @"method": @"FLUTTER",
+                @"app": app,
+                @"source": @"BoringSSL",
+                @"duration_ms": @(0),
+                @"res_headers": headers,
+            } mutableCopy];
+            if (body.length > 0) {
+                dict[@"res_body_base64"] = [[body dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0];
+            }
+
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        } else if (ret > 0) {
+            // Non-HTTP/1.x response (HTTP/2 binary hoặc binary data)
+            NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+            const uint8_t *bytes = (const uint8_t *)buf;
+            NSMutableString *hex = [NSMutableString string];
+            for (int i = 0; i < MIN(ret, 32); i++) [hex appendFormat:@"%02x ", bytes[i]];
+
+            NSDictionary *dict = @{
+                @"id": [[NSUUID UUID] UUIDString],
+                @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+                @"url": [NSString stringWithFormat:@"raw://ssl-read/%@/%d-bytes", app, ret],
+                @"status": @(0),
+                @"method": @"RAW-READ",
+                @"app": app,
+                @"source": @"BoringSSL-Raw",
+                @"duration_ms": @(0),
+                @"res_body_base64": [d base64EncodedStringWithOptions:0],
+                @"res_headers": @{@"X-Raw-Hex": hex, @"X-Raw-Size": @(ret).stringValue},
+            };
+            NSData *jd = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
+            if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+        }
+    }
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// Mach-O Symbol Table Scanner
+// ---------------------------------------------------------------------------
+// dlsym chỉ tìm được exported symbols. Flutter release builds thường đánh dấu
+// BoringSSL symbols là hidden visibility → dlsym fail.
+// Đọc trực tiếp Mach-O nlist (symbol table) để tìm cả local/hidden symbols.
+
+static void *findSymbolInImage(uint32_t imageIndex, const char *symbolName) {
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(imageIndex);
+    if (!header || header->magic != MH_MAGIC_64) return NULL;
+
+    intptr_t slide = _dyld_get_image_vmaddr_slide(imageIndex);
+
+    const uint8_t *ptr = (const uint8_t *)(header + 1);
+    const struct symtab_command *symtab_cmd = NULL;
+    const struct segment_command_64 *linkedit_seg = NULL;
+
+    for (uint32_t i = 0; i < header->ncmds; i++) {
+        const struct load_command *lc = (const struct load_command *)ptr;
+        if (lc->cmd == LC_SYMTAB) {
+            symtab_cmd = (const struct symtab_command *)lc;
+        } else if (lc->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
+            if (strcmp(seg->segname, SEG_LINKEDIT) == 0) linkedit_seg = seg;
+        }
+        ptr += lc->cmdsize;
+    }
+
+    if (!symtab_cmd || !linkedit_seg) return NULL;
+
+    // linkedit_base: chuyển file offset → memory address
+    uintptr_t linkedit_base = (uintptr_t)slide + linkedit_seg->vmaddr - linkedit_seg->fileoff;
+    const struct nlist_64 *symtab = (const struct nlist_64 *)(linkedit_base + symtab_cmd->symoff);
+    const char *strtab = (const char *)(linkedit_base + symtab_cmd->stroff);
+
+    for (uint32_t i = 0; i < symtab_cmd->nsyms; i++) {
+        uint32_t strx = symtab[i].n_un.n_strx;
+        if (strx == 0) continue;
+        // Bỏ qua debug/stab symbols
+        if (symtab[i].n_type & N_STAB) continue;
+        // Chỉ quan tâm defined symbols (có address)
+        if ((symtab[i].n_type & N_TYPE) == N_UNDF) continue;
+        if (symtab[i].n_value == 0) continue;
+
+        const char *name = strtab + strx;
+        // Mach-O symbols có prefix underscore: _SSL_write
+        if (name[0] == '_' && strcmp(name + 1, symbolName) == 0) {
+            return (void *)(symtab[i].n_value + slide);
+        }
+        if (strcmp(name, symbolName) == 0) {
+            return (void *)(symtab[i].n_value + slide);
+        }
+    }
+
+    return NULL;
+}
+
+// Tìm và hook SSL_write/SSL_read từ BoringSSL
+// Chiến lược:
+//   1. dlsym (exported symbols) — thử cả tên gốc và prefixed (BSSL_)
+//   2. Mach-O nlist (hidden/local symbols) — thử cả tên gốc và prefixed
+//   3. Scan tất cả non-system dylibs (App.framework, third-party libs)
+//   4. _dyld_register_func_for_add_image callback (late-loaded frameworks)
+//
+// Flutter builds BoringSSL with BORINGSSL_PREFIX → symbols có thể bị rename
+// thành BSSL_SSL_write thay vì SSL_write. Hoặc bị strip hoàn toàn.
+
+// Symbol name variants to try
+static const char *kSSLWriteNames[] = {"SSL_write", "BSSL_SSL_write", NULL};
+static const char *kSSLReadNames[]  = {"SSL_read",  "BSSL_SSL_read", NULL};
+static const char *kSSLAlpnNames[]  = {
+    "SSL_CTX_set_alpn_protos", "BSSL_SSL_CTX_set_alpn_protos",
+    "SSL_set_alpn_protos", "BSSL_SSL_set_alpn_protos", NULL
+};
+
+// Helper: tìm symbol bằng dlsym hoặc nlist trong 1 image, thử nhiều tên
+static void findBoringSymbols(uint32_t imageIndex, const char *imagePath,
+                              void **out_write, void **out_read, void **out_alpn) {
+    // ── dlsym (exported symbols) ──
+    void *handle = dlopen(imagePath, RTLD_NOLOAD | RTLD_LAZY);
+    if (handle) {
+        for (int i = 0; kSSLWriteNames[i] && !*out_write; i++)
+            *out_write = dlsym(handle, kSSLWriteNames[i]);
+        for (int i = 0; kSSLReadNames[i] && !*out_read; i++)
+            *out_read = dlsym(handle, kSSLReadNames[i]);
+        for (int i = 0; kSSLAlpnNames[i] && !*out_alpn; i++)
+            *out_alpn = dlsym(handle, kSSLAlpnNames[i]);
+        dlclose(handle);
+        if (*out_write && *out_read) {
+            NSLog(@"[NetLogger] BoringSSL found via dlsym in: %s (w=%p r=%p a=%p)", imagePath, *out_write, *out_read, *out_alpn);
+            return;
+        }
+        NSLog(@"[NetLogger] dlsym partial (write=%p read=%p) — trying nlist...", *out_write, *out_read);
+    }
+
+    // ── nlist (hidden/local/prefixed symbols) ──
+    for (int i = 0; kSSLWriteNames[i] && !*out_write; i++) {
+        void *p = findSymbolInImage(imageIndex, kSSLWriteNames[i]);
+        if (p) { *out_write = p; break; }
+    }
+    for (int i = 0; kSSLReadNames[i] && !*out_read; i++) {
+        void *p = findSymbolInImage(imageIndex, kSSLReadNames[i]);
+        if (p) { *out_read = p; break; }
+    }
+    for (int i = 0; kSSLAlpnNames[i] && !*out_alpn; i++) {
+        void *p = findSymbolInImage(imageIndex, kSSLAlpnNames[i]);
+        if (p) { *out_alpn = p; break; }
+    }
+    if (*out_write && *out_read) {
+        NSLog(@"[NetLogger] BoringSSL found via nlist in: %s (w=%p r=%p a=%p)", imagePath, *out_write, *out_read, *out_alpn);
+    }
+}
+
+// ── Debug: liệt kê symbols liên quan SSL/TLS trong image ──
+// Gọi khi không tìm được symbols để xác định binary có bị strip hay prefix khác.
+static void logSSLSymbolsInImage(uint32_t imageIndex) {
+    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(imageIndex);
+    if (!header || header->magic != MH_MAGIC_64) return;
+
+    intptr_t slide = _dyld_get_image_vmaddr_slide(imageIndex);
+    const uint8_t *ptr = (const uint8_t *)(header + 1);
+    const struct symtab_command *symtab_cmd = NULL;
+    const struct segment_command_64 *linkedit_seg = NULL;
+
+    for (uint32_t i = 0; i < header->ncmds; i++) {
+        const struct load_command *lc = (const struct load_command *)ptr;
+        if (lc->cmd == LC_SYMTAB) symtab_cmd = (const struct symtab_command *)lc;
+        else if (lc->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64 *seg = (const struct segment_command_64 *)lc;
+            if (strcmp(seg->segname, SEG_LINKEDIT) == 0) linkedit_seg = seg;
+        }
+        ptr += lc->cmdsize;
+    }
+
+    if (!symtab_cmd || !linkedit_seg) {
+        NSLog(@"[NetLogger] No symtab in image #%u — fully stripped", imageIndex);
+        return;
+    }
+
+    uintptr_t linkedit_base = (uintptr_t)slide + linkedit_seg->vmaddr - linkedit_seg->fileoff;
+    const struct nlist_64 *symtab = (const struct nlist_64 *)(linkedit_base + symtab_cmd->symoff);
+    const char *strtab = (const char *)(linkedit_base + symtab_cmd->stroff);
+
+    NSLog(@"[NetLogger] Image #%u has %u symbols total — scanning for SSL/TLS...", imageIndex, symtab_cmd->nsyms);
+
+    int found = 0;
+    for (uint32_t i = 0; i < symtab_cmd->nsyms && found < 30; i++) {
+        uint32_t strx = symtab[i].n_un.n_strx;
+        if (strx == 0) continue;
+        if (symtab[i].n_type & N_STAB) continue;
+
+        const char *name = strtab + strx;
+        if (strcasestr(name, "ssl") || strcasestr(name, "boring") ||
+            strcasestr(name, "tls") || strcasestr(name, "x509") ||
+            strcasestr(name, "BSSL")) {
+            NSLog(@"[NetLogger]   sym[%u]: %s (type=0x%x val=0x%llx)",
+                  i, name, symtab[i].n_type, (unsigned long long)symtab[i].n_value);
+            found++;
+        }
+    }
+    if (found == 0) {
+        NSLog(@"[NetLogger] No SSL/TLS/BoringSSL symbols found — binary fully stripped");
+    }
+}
+
+// ── Install hooks khi tìm được symbols ──
+static BOOL g_boringSSLHooked = NO;
+
+static void installBoringSSLHooks(void *ssl_write, void *ssl_read, void *ssl_alpn) {
+    if (g_boringSSLHooked) return;
+
+    NSString *app = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+
+    if (ssl_write && ssl_read) {
+        MSHookFunction(ssl_write, (void *)hook_boring_SSL_write, (void **)&orig_boring_SSL_write);
+        MSHookFunction(ssl_read,  (void *)hook_boring_SSL_read,  (void **)&orig_boring_SSL_read);
+        g_boringSSLHooked = YES;
+        NSLog(@"[NetLogger] BoringSSL SSL_write/SSL_read hooks installed!");
+    }
+
+    if (ssl_alpn) {
+        MSHookFunction(ssl_alpn, (void *)hook_boring_SSL_CTX_set_alpn_protos, (void **)&orig_boring_SSL_CTX_set_alpn_protos);
+        NSLog(@"[NetLogger] BoringSSL ALPN hook installed — forcing HTTP/1.1");
+    }
+
+    // Diagnostic vào log file — encode status in URL để user thấy trong UI
+    NSDictionary *diag = @{
+        @"id": [[NSUUID UUID] UUIDString],
+        @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+        @"method": @"DIAGNOSTIC",
+        @"url": [NSString stringWithFormat:@"diagnostic://boringssl/%@/w=%s/r=%s/a=%s",
+            app,
+            ssl_write ? "OK" : "MISS",
+            ssl_read ? "OK" : "MISS",
+            ssl_alpn ? "OK" : "MISS"],
+        @"status": @(ssl_write && ssl_read ? 200 : 0),
+        @"app": app,
+        @"source": [NSString stringWithFormat:@"BoringSSL: write=%s read=%s alpn=%s",
+            ssl_write ? "OK" : "MISS", ssl_read ? "OK" : "MISS", ssl_alpn ? "OK" : "MISS"],
+    };
+    NSData *jd = [NSJSONSerialization dataWithJSONObject:diag options:0 error:nil];
+    if (jd) appendLine([[NSString alloc] initWithData:jd encoding:NSUTF8StringEncoding]);
+}
+
+// ── Scan single image for BoringSSL and hook ──
+static BOOL tryHookBoringSSLInImageIndex(uint32_t imageIndex) {
+    const char *name = _dyld_get_image_name(imageIndex);
+    if (!name) return NO;
+
+    void *ssl_write = NULL, *ssl_read = NULL, *ssl_alpn = NULL;
+    findBoringSymbols(imageIndex, name, &ssl_write, &ssl_read, &ssl_alpn);
+
+    if (ssl_write && ssl_read) {
+        installBoringSSLHooks(ssl_write, ssl_read, ssl_alpn);
+        return YES;
+    }
+    return NO;
+}
+
+// ── dyld callback: hook Flutter.framework khi nó load (có thể sau %ctor) ──
+static void onImageAdded(const struct mach_header *mh, intptr_t vmaddr_slide) {
+    if (g_boringSSLHooked) return;
+
+    uint32_t imageCount = _dyld_image_count();
+    for (uint32_t i = 0; i < imageCount; i++) {
+        if ((const struct mach_header *)_dyld_get_image_header(i) != mh) continue;
+
+        const char *name = _dyld_get_image_name(i);
+        if (!name) return;
+        // Chỉ quan tâm app frameworks, không phải system
+        if (strstr(name, "/usr/lib/") || strstr(name, "/System/Library/")) return;
+
+        NSLog(@"[NetLogger] dyld callback: image #%u loaded: %s", i, name);
+
+        if (tryHookBoringSSLInImageIndex(i)) {
+            NSLog(@"[NetLogger] BoringSSL hooked via dyld callback for: %s", name);
+        }
+        return;
+    }
+}
+
+static void hookBoringSSL(void) {
+    uint32_t imageCount = _dyld_image_count();
+    uint32_t flutterImageIndex = UINT32_MAX;
+
+    // ── Bước 1: Tìm trong Flutter.framework ──
+    for (uint32_t i = 0; i < imageCount; i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name || !strstr(name, "Flutter.framework/Flutter")) continue;
+
+        NSLog(@"[NetLogger] Found Flutter.framework at image #%u: %s", i, name);
+        flutterImageIndex = i;
+        if (tryHookBoringSSLInImageIndex(i)) return;
+        break;
+    }
+
+    // ── Bước 2: Nếu chưa tìm được, scan tất cả non-system libraries ──
+    if (!g_boringSSLHooked) {
+        NSLog(@"[NetLogger] Scanning all non-system libraries for BoringSSL...");
+        for (uint32_t i = 0; i < imageCount; i++) {
+            const char *name = _dyld_get_image_name(i);
+            if (!name) continue;
+            if (strstr(name, "/usr/lib/") || strstr(name, "/System/Library/")) continue;
+            if (strstr(name, "Flutter.framework")) continue;
+
+            if (tryHookBoringSSLInImageIndex(i)) return;
+        }
+    }
+
+    // ── Bước 3: Nếu vẫn chưa tìm được, dump symbols để debug ──
+    if (!g_boringSSLHooked) {
+        if (flutterImageIndex != UINT32_MAX) {
+            NSLog(@"[NetLogger] BoringSSL symbols NOT found in Flutter.framework — dumping available symbols...");
+            logSSLSymbolsInImage(flutterImageIndex);
+        } else {
+            NSLog(@"[NetLogger] Flutter.framework NOT loaded yet — registering dyld callback");
+        }
+
+        // Ghi diagnostic MISS
+        installBoringSSLHooks(NULL, NULL, NULL);
+
+        // ── Bước 4: Đăng ký dyld callback để bắt late-loaded frameworks ──
+        _dyld_register_func_for_add_image(onImageAdded);
+        NSLog(@"[NetLogger] Registered _dyld_register_func_for_add_image for late BoringSSL detection");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // BSD Socket Interception (TCP/UDP - Transport Layer)
 // ---------------------------------------------------------------------------
 
@@ -925,17 +1437,25 @@ static BOOL isRegisteringProtocol = NO;
         MSHookFunction((void *)SSLWrite, (void *)hook_SSLWrite, (void **)&orig_SSLWrite);
         MSHookFunction((void *)SSLRead, (void *)hook_SSLRead, (void **)&orig_SSLRead);
 #pragma clang diagnostic pop
-        
+
+        // BoringSSL Hooks (Flutter / Dart apps)
+        hookBoringSSL();
+
         // BSD Socket Hooks (TCP/UDP Transport Layer)
         // CHỈ hook khi user BẬT toggle — tránh Anti-Cheat game Unity/Garena phát hiện
         // hàm connect/send/recv bị patch prologue → SIGILL crash
-        if ([prefs[@"socketCaptureEnabled"] boolValue]) {
+        // SKIP cho Flutter apps: send()/recv() là syscall wrappers cực ngắn,
+        // ellekit không đủ chỗ patch prologue → SIGTRAP crash.
+        // Flutter traffic đã được capture qua BoringSSL hooks ở trên.
+        if ([prefs[@"socketCaptureEnabled"] boolValue] && !g_boringSSLHooked) {
             MSHookFunction((void *)connect, (void *)hook_connect, (void **)&orig_connect);
             MSHookFunction((void *)send, (void *)hook_send, (void **)&orig_send);
             MSHookFunction((void *)recv, (void *)hook_recv, (void **)&orig_recv);
             MSHookFunction((void *)sendto, (void *)hook_sendto, (void **)&orig_sendto);
             MSHookFunction((void *)recvfrom, (void *)hook_recvfrom, (void **)&orig_recvfrom);
             NSLog(@"[NetLogger] BSD Socket hooks ENABLED for %@", bid);
+        } else if ([prefs[@"socketCaptureEnabled"] boolValue] && g_boringSSLHooked) {
+            NSLog(@"[NetLogger] BSD Socket hooks SKIPPED for Flutter app %@ (BoringSSL hooks active, send/recv patch unsafe)", bid);
         }
         
         // Tự động Quét thẻ bài Entitlement của Ứng dụng. 
