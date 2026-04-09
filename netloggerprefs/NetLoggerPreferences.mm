@@ -713,10 +713,12 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
         
         // App icon
         UIImageView *iconView = [[UIImageView alloc] init];
-        UIImageSymbolConfiguration *iconConfig = [UIImageSymbolConfiguration configurationWithPointSize:36 weight:UIImageSymbolWeightBold];
-        iconView.image = [UIImage systemImageNamed:@"network" withConfiguration:iconConfig];
-        iconView.tintColor = [UIColor whiteColor];
+        NSBundle *bundle = [NSBundle bundleWithIdentifier:@"com.minh.netloggerprefs"];
+        iconView.image = [UIImage imageNamed:@"icon" inBundle:bundle compatibleWithTraitCollection:nil];
         iconView.contentMode = UIViewContentModeScaleAspectFit;
+        iconView.layer.cornerRadius = 10.0;
+        iconView.layer.cornerCurve = kCACornerCurveContinuous;
+        iconView.clipsToBounds = YES;
         iconView.translatesAutoresizingMaskIntoConstraints = NO;
         [container addSubview:iconView];
         
@@ -793,6 +795,25 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
 @end
 
 @implementation NetLoggerPreferencesListController
+
+static void ReloadPrefsCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    NetLoggerPreferencesListController *controller = (__bridge NetLoggerPreferencesListController *)observer;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [controller reloadSpecifiers];
+    });
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ReloadPrefsCallback, CFSTR("com.minh.netlogger/ReloadPrefs"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    }
+    return self;
+}
+
+- (void)dealloc {
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), CFSTR("com.minh.netlogger/ReloadPrefs"), NULL);
+}
 
 - (NSArray *)specifiers {
   if (!_specifiers) {

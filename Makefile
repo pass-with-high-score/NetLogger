@@ -19,5 +19,5 @@ NetLogger_FRAMEWORKS = Foundation WebKit Security Network
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-SUBPROJECTS += netloggerprefs
+SUBPROJECTS += netloggerprefs netloggercc
 include $(THEOS_MAKE_PATH)/aggregate.mk
