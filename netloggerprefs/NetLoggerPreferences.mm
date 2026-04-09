@@ -795,8 +795,10 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
 @implementation NetLoggerPreferencesListController
 
 - (NSArray *)specifiers {
-  if (!_specifiers)
+  if (!_specifiers) {
     _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+    [self addIconsToSpecifiers];
+  }
   return _specifiers;
 }
 
@@ -822,9 +824,6 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
     if (tv) {
         tv.tableHeaderView = header;
     }
-    
-    // Style specifier cells with icons
-    [self addIconsToSpecifiers];
 }
 
 - (void)addIconsToSpecifiers {
@@ -864,8 +863,8 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
             icon = iconWithSFSymbol(@"list.bullet.rectangle", [UIColor systemTealColor], iconSize);
         }
         // About
-        else if ([label containsString:@"GitHub"]) {
-            icon = iconWithSFSymbol(@"star.fill", [UIColor systemYellowColor], iconSize);
+        else if ([label isEqualToString:@"Donate"]) {
+            icon = iconWithSFSymbol(@"heart.fill", [UIColor systemPinkColor], iconSize);
         } else if ([label isEqualToString:@"Version"]) {
             icon = iconWithSFSymbol(@"info.circle", [UIColor systemGray2Color], iconSize);
         } else if ([label isEqualToString:@"Author"]) {
@@ -885,6 +884,15 @@ static UIImage *iconWithSFSymbol(NSString *name, UIColor *color, CGFloat size) {
 - (void)openGithub {
   NSURL *url = [NSURL
       URLWithString:@"https://github.com/pass-with-high-score/NetLogger"];
+  if ([[UIApplication sharedApplication] canOpenURL:url]) {
+    [[UIApplication sharedApplication] openURL:url
+                                       options:@{}
+                             completionHandler:nil];
+  }
+}
+
+- (void)openDonate {
+  NSURL *url = [NSURL URLWithString:@"https://buymeacoffee.com/nguyenquane"];
   if ([[UIApplication sharedApplication] canOpenURL:url]) {
     [[UIApplication sharedApplication] openURL:url
                                        options:@{}

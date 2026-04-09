@@ -168,9 +168,19 @@
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>GitHub / Source Code ⭐️</string>
+			<string>GitHub</string>
 			<key>action</key>
 			<string>openGithub</string>
+			<key>icon</key>
+			<string>github.png</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Donate</string>
+			<key>action</key>
+			<string>openDonate</string>
 		</dict>
 		<dict>
 			<key>cell</key>
