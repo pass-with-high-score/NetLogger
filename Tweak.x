@@ -13,6 +13,7 @@
 #import <mach-o/loader.h>
 #import <mach-o/nlist.h>
 #import "NLURLProtocol.h"
+#import "NLCommon.h"
 
 // ---------------------------------------------------------------------------
 // Entitlement Sandbox Checks
@@ -111,12 +112,14 @@ static NSDictionary *readPrefs() {
     CFPropertyListRef en   = CFPreferencesCopyAppValue(CFSTR("enabled"), NL_DOMAIN);
     CFPropertyListRef apps = CFPreferencesCopyAppValue(CFSTR("selectedApps"), NL_DOMAIN);
     CFPropertyListRef bl   = CFPreferencesCopyAppValue(CFSTR("blacklistedDomains"), NL_DOMAIN);
+    CFPropertyListRef blRules = CFPreferencesCopyAppValue(CFSTR("blacklistRules"), NL_DOMAIN);
     CFPropertyListRef nocache = CFPreferencesCopyAppValue(CFSTR("noCachingEnabled"), NL_DOMAIN);
     CFPropertyListRef socketCap = CFPreferencesCopyAppValue(CFSTR("socketCaptureEnabled"), NL_DOMAIN);
     
     if (en)   r[@"enabled"]      = (__bridge_transfer id)en;
     if (apps) r[@"selectedApps"] = (__bridge_transfer id)apps;
     if (bl)   r[@"blacklistedDomains"] = (__bridge_transfer id)bl;
+    if (blRules) r[@"blacklistRules"] = (__bridge_transfer id)blRules;
     if (nocache) r[@"noCachingEnabled"] = (__bridge_transfer id)nocache;
     if (socketCap) r[@"socketCaptureEnabled"] = (__bridge_transfer id)socketCap;
     
@@ -141,6 +144,67 @@ BOOL isNoCachingEnabled(void) {
 BOOL isSocketCaptureEnabled(void) {
     NSDictionary *prefs = readPrefs();
     return [prefs[@"socketCaptureEnabled"] boolValue];
+}
+
+// ---------------------------------------------------------------------------
+// Blacklist Rule Engine (Shadowrocket-style)
+// ---------------------------------------------------------------------------
+// Filter types: 0=Domain (exact), 1=Domain Suffix, 2=Domain Keyword
+// Policy: 0=Direct (skip log), 1=Reject (block request)
+
+static BOOL matchesBlacklistRule(NSString *host, NSDictionary *rule) {
+    if (![rule[@"enabled"] boolValue]) return NO;
+    
+    NSString *pattern = [rule[@"domain"] lowercaseString];
+    if (!pattern || pattern.length == 0) return NO;
+    
+    NSInteger filterType = [rule[@"filter_type"] integerValue];
+    
+    switch (filterType) {
+        case 0: // Domain — exact match
+            return [host isEqualToString:pattern];
+        case 1: // Domain Suffix — host ends with pattern
+            if ([host isEqualToString:pattern]) return YES;
+            return [host hasSuffix:[NSString stringWithFormat:@".%@", pattern]];
+        case 2: // Domain Keyword — host contains pattern
+            return [host containsString:pattern];
+        default:
+            return NO;
+    }
+}
+
+NLBlacklistPolicy getBlacklistPolicy(NSString *host) {
+    if (!host || host.length == 0) return NLPolicyNone;
+    
+    NSString *lowerHost = [host lowercaseString];
+    NSDictionary *prefs = readPrefs();
+    
+    // Try new rule format first
+    NSArray *rules = prefs[@"blacklistRules"];
+    if ([rules isKindOfClass:[NSArray class]] && rules.count > 0) {
+        for (NSDictionary *rule in rules) {
+            if (![rule isKindOfClass:[NSDictionary class]]) continue;
+            if (matchesBlacklistRule(lowerHost, rule)) {
+                NSInteger policy = [rule[@"policy"] integerValue];
+                return (policy == 1) ? NLPolicyReject : NLPolicyDirect;
+            }
+        }
+        return NLPolicyNone;
+    }
+    
+    // Fallback: old CSV format (blacklistedDomains) — treated as Direct
+    NSString *blacklistString = prefs[@"blacklistedDomains"];
+    if (blacklistString && blacklistString.length > 0) {
+        NSArray *domains = [blacklistString componentsSeparatedByString:@","];
+        for (NSString *d in domains) {
+            NSString *trimmed = [d stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]].lowercaseString;
+            if (trimmed.length > 0 && [lowerHost containsString:trimmed]) {
+                return NLPolicyDirect;
+            }
+        }
+    }
+    
+    return NLPolicyNone;
 }
 
 // ---------------------------------------------------------------------------
@@ -339,20 +403,10 @@ NSData *applyMitmRules(NSData *originalData, NSURLRequest *request) {
 NSString *buildEntry(NSURLRequest *request, NSData *data, NSURLResponse *response, double durationMs) {
     if (!request || !request.URL) return nil;
     
-    // Check blacklist
-    NSDictionary *prefs = readPrefs();
-    NSString *blacklistString = prefs[@"blacklistedDomains"];
-    if (blacklistString && blacklistString.length > 0) {
-        NSString *host = request.URL.host.lowercaseString;
-        if (host) {
-            NSArray *domains = [blacklistString componentsSeparatedByString:@","];
-            for (NSString *d in domains) {
-                NSString *trimmed = [d stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]].lowercaseString;
-                if (trimmed.length > 0 && [host containsString:trimmed]) {
-                    return nil; // Blocked by blacklist
-                }
-            }
-        }
+    // Check blacklist rules (Direct = skip log, Reject = also skip log since request was blocked)
+    NLBlacklistPolicy policy = getBlacklistPolicy(request.URL.host);
+    if (policy != NLPolicyNone) {
+        return nil; // Filtered by blacklist rule
     }
 
     NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;

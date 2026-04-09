@@ -52,3 +52,26 @@
 "Enter domain to block (e.g. google-analytics.com)" = "Enter domain to block (e.g. google-analytics.com)";
 "Add" = "Add";
 "No Blacklisted Domains" = "No Blacklisted Domains";
+
+"Filter Type" = "Filter Type";
+"Domain Pattern" = "Domain Pattern";
+"Policy" = "Policy";
+"Domain" = "Domain";
+"Domain Suffix" = "Domain Suffix";
+"Domain Keyword" = "Domain Keyword";
+"Exact host match" = "Exact host match";
+"Match hosts ending with pattern" = "Match hosts ending with pattern";
+"Match hosts containing keyword" = "Match hosts containing keyword";
+"Domain / Keyword" = "Domain / Keyword";
+"Direct" = "Direct";
+"Reject" = "Reject";
+"Allow traffic, hide from logs" = "Allow traffic, hide from logs";
+"Block request entirely" = "Block request entirely";
+"Domain pattern is required." = "Domain pattern is required.";
+"Rules" = "Rules";
+"Tap + to add a domain rule.\nDirect = hide from logs, Reject = block." = "Tap + to add a domain rule.\nDirect = hide from logs, Reject = block.";
+"Select how the domain pattern should be matched against request hosts." = "Select how the domain pattern should be matched against request hosts.";
+"Exact match: only requests to this exact domain will be affected." = "Exact match: only requests to this exact domain will be affected.";
+"Suffix match: any host ending with this pattern will be affected (e.g. '.google.com' matches 'ads.google.com')." = "Suffix match: any host ending with this pattern will be affected (e.g. '.google.com' matches 'ads.google.com').";
+"Keyword match: any host containing this keyword will be affected." = "Keyword match: any host containing this keyword will be affected.";
+"Direct: allow traffic but hide from logs. Reject: block the request entirely." = "Direct: allow traffic but hide from logs. Reject: block the request entirely.";

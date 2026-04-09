@@ -1,5 +1,5 @@
 #import <UIKit/UIKit.h>
+#import <Preferences/PSViewController.h>
 
-@interface NLBlacklistController : UIViewController
-
+@interface NLBlacklistController : PSViewController <UITableViewDelegate, UITableViewDataSource>
 @end

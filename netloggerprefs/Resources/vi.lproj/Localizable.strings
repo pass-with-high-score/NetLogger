@@ -52,3 +52,26 @@
 "Enter domain to block (e.g. google-analytics.com)" = "Nhập tên miền muốn chặn (vd: ads.com)";
 "Add" = "Thêm";
 "No Blacklisted Domains" = "Chưa có tên miền nào bị chặn";
+
+"Filter Type" = "Loại Bộ lọc";
+"Domain Pattern" = "Mẫu Tên miền";
+"Policy" = "Chính sách";
+"Domain" = "Tên miền (chính xác)";
+"Domain Suffix" = "Hậu tố Tên miền";
+"Domain Keyword" = "Từ khóa Tên miền";
+"Exact host match" = "Khớp chính xác tên miền";
+"Match hosts ending with pattern" = "Khớp tên miền kết thúc bằng mẫu";
+"Match hosts containing keyword" = "Khớp tên miền chứa từ khóa";
+"Domain / Keyword" = "Tên miền / Từ khóa";
+"Direct" = "Cho phép (Direct)";
+"Reject" = "Chặn (Reject)";
+"Allow traffic, hide from logs" = "Cho phép truy cập, ẩn khỏi log";
+"Block request entirely" = "Chặn hoàn toàn yêu cầu";
+"Domain pattern is required." = "Vui lòng nhập mẫu tên miền.";
+"Rules" = "Quy tắc";
+"Tap + to add a domain rule.\nDirect = hide from logs, Reject = block." = "Nhấn + để thêm quy tắc.\nDirect = ẩn log, Reject = chặn.";
+"Select how the domain pattern should be matched against request hosts." = "Chọn cách so khớp mẫu tên miền với host yêu cầu.";
+"Exact match: only requests to this exact domain will be affected." = "Khớp chính xác: chỉ ảnh hưởng các request đến đúng tên miền này.";
+"Suffix match: any host ending with this pattern will be affected (e.g. '.google.com' matches 'ads.google.com')." = "Khớp hậu tố: ảnh hưởng tất cả host kết thúc bằng mẫu (vd: '.google.com' khớp 'ads.google.com').";
+"Keyword match: any host containing this keyword will be affected." = "Khớp từ khóa: ảnh hưởng tất cả host chứa từ khóa này.";
+"Direct: allow traffic but hide from logs. Reject: block the request entirely." = "Direct: cho phép truy cập nhưng ẩn khỏi log. Reject: chặn hoàn toàn yêu cầu.";

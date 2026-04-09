@@ -134,6 +134,17 @@ static NSString *const NLProtocolHandledKey = @"NLProtocolHandledKey";
                    inRequest:newRequest];
 
   // ==========================================
+  // BLACKLIST REJECT POLICY: Block request entirely
+  // ==========================================
+  NLBlacklistPolicy blPolicy = getBlacklistPolicy(newRequest.URL.host);
+  if (blPolicy == NLPolicyReject) {
+      [self.client URLProtocol:self didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:@{
+          NSLocalizedDescriptionKey: [NSString stringWithFormat:@"[NetLogger] Rejected by blacklist rule: %@", newRequest.URL.host]
+      }]];
+      return;
+  }
+
+  // ==========================================
   // ANTI-CACHE CỰC MẠNH: Dành riêng cho RevenueCat & Các SDK cứng đầu
   // ==========================================
   // Xóa sạch mọi kí hiệu ETag của RevenueCat để dụ Server nhả JSON 200 OK mới tinh
